@@ -355,3 +355,19 @@ test('an HTTPS login failure on another host explains how to sign in once', asyn
   );
   assert.equal(engine.loadConfig().remote, old);
 });
+
+test('anonymous Git configuration uses an absent ordinary path and cleans its temporary directory', async t => {
+  const engine = fixture(t);
+  let isolated;
+  engine._spawn = async (_cmd, _args, _timeout, options) => {
+    const file = options.env.GIT_CONFIG_GLOBAL;
+    isolated = path.dirname(file);
+    assert.equal(path.isAbsolute(file), true);
+    assert.equal(fs.existsSync(file), false);
+    assert.equal(fs.statSync(isolated).isDirectory(), true);
+    assert.equal(options.env.GIT_CONFIG_SYSTEM, file);
+    return { code: 0, out: '', err: '' };
+  };
+  await engine.anonymousRead('https://example.invalid/repo.git');
+  assert.equal(fs.existsSync(isolated), false);
+});

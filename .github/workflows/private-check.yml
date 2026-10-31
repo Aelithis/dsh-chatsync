@@ -19,6 +19,9 @@ jobs:
         with:
           node-version: '24.22.1'
       - run: npm ci --ignore-scripts
+      - name: 验证 Windows Git 隔离与恢复记录
+        if: runner.os == 'Windows'
+        run: node --test tests/generic-remote.test.mjs tests/local-history.test.mjs tests/private-project-mappings.test.mjs
       - name: 隔离回归与打包检查
         env:
           TMPDIR: ${{ runner.temp }}

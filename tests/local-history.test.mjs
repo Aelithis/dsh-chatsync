@@ -50,7 +50,16 @@ test(
     // Clear as an earlier version did: archive on the remote, new root commit,
     // remote backup branch deleted, but the local backup ref left in place.
     bare('branch', 'archive/sync-history/1-old', oldTip);
-    const fresh = bare('commit-tree', oldTip + '^{tree}', '-m', 'cleared');
+    const fresh = bare(
+      '-c',
+      'user.name=t',
+      '-c',
+      'user.email=t@invalid',
+      'commit-tree',
+      oldTip + '^{tree}',
+      '-m',
+      'cleared',
+    );
     bare('update-ref', 'refs/heads/main', fresh);
     await engine.git(['fetch', 'origin']);
     await engine.git(['reset', '--soft', 'origin/main']);
