@@ -32,7 +32,7 @@ test('local choices register shared roots, refresh memberships and release old m
     const binding = bindProjectMappings(ctx, engine);
     await binding.refresh();
     await binding.refresh();
-    assert.deepEqual(calls, [{ roots: ['D:\\共享项目\\示例'], directory: root }]);
+    assert.deepEqual(calls, [{ roots: ['D:\\共享项目\\示例'], directory: fs.realpathSync(root) }]);
     assert.equal(refreshes, 2);
     directory = null;
     await binding.refresh();
