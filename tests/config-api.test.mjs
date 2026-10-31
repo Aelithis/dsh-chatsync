@@ -9,7 +9,7 @@ import { SyncEngine } from '../lib/sync.js';
 import { RecoveryStore } from '../lib/recovery.js';
 
 test('recovery API explains saved records and identifies the actual build', async t => {
-  const request = host(t, {}, home => {
+  const request = await host(t, {}, home => {
     const store = new RecoveryStore(home);
     const saved = store.save(
       { kind: 'main', path: 'storages/sync-meta/profiles/web/package.json.vmap.json' },
@@ -30,7 +30,7 @@ test('recovery API explains saved records and identifies the actual build', asyn
 
 test('recovery archiving is reversible and corrupt or incomplete records remain visible', async t => {
   let saved;
-  const request = host(t, {}, home => {
+  const request = await host(t, {}, home => {
     const store = new RecoveryStore(home);
     saved = store.save(
       { kind: 'main', path: 'settings.yaml', status: 'merged' },
@@ -49,7 +49,7 @@ test('recovery archiving is reversible and corrupt or incomplete records remain 
 });
 
 test('status exposes current repair verification even with no prior sync and clears after acknowledgment', async t => {
-  const request = host(t, {}, home => {
+  const request = await host(t, {}, home => {
     const folder = path.join(home, '.chatsync-local/data-repair');
     fs.mkdirSync(folder, { recursive: true });
     fs.writeFileSync(path.join(folder, 'verification.json'), '["completed-plan"]');
@@ -63,14 +63,14 @@ test('status exposes current repair verification even with no prior sync and cle
   assert.equal((await request('status')).dataVerificationPending, false);
 });
 
-test('the manual restart endpoint is removed while data repair remains available', t => {
-  const request = host(t);
+test('the manual restart endpoint is removed while data repair remains available', async t => {
+  const request = await host(t);
   assert.equal(request.routes.has('/dsh-sync/api/restart'), false);
   assert.equal(request.routes.has('/dsh-sync/api/data-health/scan'), true);
 });
 
 test('local grouping diagnosis is available without a configured sync remote', async t => {
-  const request = host(t, { autoRestartAfterRepair: true });
+  const request = await host(t, { autoRestartAfterRepair: true });
   const result = await request('grouping');
   assert.equal(result.ok, true);
   assert.equal(result.enabled, true);
@@ -79,7 +79,7 @@ test('local grouping diagnosis is available without a configured sync remote', a
   assert.equal(result.issueKey, null);
 });
 
-function host(t, overrides = {}, inspect = () => {}) {
+async function host(t, overrides = {}, inspect = () => {}) {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'dsh-config-api-'));
   const routes = new Map(),
     cleanup = [];
@@ -92,7 +92,7 @@ function host(t, overrides = {}, inspect = () => {}) {
     JSON.stringify({ mode: 'manual', autoRepo: false, autoPullOnStart: false, autoPushOnExit: false, enabled: true }),
   );
   inspect(home);
-  apply(
+  await apply(
     {
       webServer: {
         register(route) {
@@ -132,7 +132,7 @@ function host(t, overrides = {}, inspect = () => {}) {
 }
 
 test('legacy mode changes do not control lifecycle automation; master switch does', async t => {
-  const request = host(t);
+  const request = await host(t);
   assert.equal((await request('status')).auto, true);
   assert.equal((await request('config', { mode: 'auto' })).auto, true);
   assert.equal((await request('config', { mode: 'manual' })).auto, true);
@@ -140,7 +140,7 @@ test('legacy mode changes do not control lifecycle automation; master switch doe
 });
 
 test('credential-free Git connections on any host are saved; invalid addresses preserve the old config', async t => {
-  const request = host(t);
+  const request = await host(t);
   const saved = await request('config', {
     remote: 'https://github.com/alice/data.git',
     branch: 'main',
@@ -164,7 +164,7 @@ test('credential-free Git connections on any host are saved; invalid addresses p
 });
 
 test('one automatic API field saves both legacy flags and reports host overrides', async t => {
-  const request = host(t);
+  const request = await host(t);
   assert.equal((await request('config')).config.automatic, true);
   const on = await request('config', { automatic: true, intervalSeconds: 1200 });
   assert.equal(on.auto, true);
@@ -176,7 +176,7 @@ test('one automatic API field saves both legacy flags and reports host overrides
   assert.equal(off.config.enabled, false);
   for (const automatic of [null, 'yes', 1]) assert.equal((await request('config', { automatic })).ok, false);
   assert.equal((await request('config', { automatic: true, mode: 'manual' })).ok, false);
-  const forced = host(t, { mode: 'auto', enabled: false });
+  const forced = await host(t, { mode: 'auto', enabled: false });
   assert.equal(
     (await forced('config', { automatic: true })).config.automatic,
     true,
@@ -186,7 +186,7 @@ test('one automatic API field saves both legacy flags and reports host overrides
 
 test('read-only preview and doctor do not initialize data, recovery rejects arbitrary paths', async t => {
   let home;
-  const request = host(t, {}, dir => {
+  const request = await host(t, {}, dir => {
     home = dir;
   });
   const before = fs.readdirSync(home);
@@ -199,49 +199,13 @@ test('read-only preview and doctor do not initialize data, recovery rejects arbi
   assert.deepEqual(fs.readdirSync(home), before);
 });
 
-test('update route reports the running version and rejects mutation requests', async t => {
-  const originalFetch = globalThis.fetch;
-  t.after(() => {
-    globalThis.fetch = originalFetch;
-  });
-  const current = JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version;
-  const newer = Number(current.split('.')[0]) + 1 + '.0.0';
-  let packageProbed = false;
-  const tarball = 'https://registry.npmjs.org/@dpskk2/dsh-chatsync/-/dsh-chatsync-' + newer + '.tgz';
-  globalThis.fetch = async (url, options) => {
-    if (options?.method === 'HEAD') {
-      assert.equal(url, tarball);
-      packageProbed = true;
-      return { ok: true };
-    }
-    return {
-      ok: true,
-      json: async () =>
-        url.includes('registry.npmjs.org')
-          ? { name: '@dpskk2/dsh-chatsync', version: newer, dist: { tarball } }
-          : { tag_name: 'v' + newer, body: '新版本更新内容' },
-    };
-  };
-  const request = host(t);
-  const result = await request('update');
-  assert.equal(result.ok, true);
-  assert.equal(
-    result.currentVersion,
-    JSON.parse(fs.readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version,
-  );
-  assert.equal(result.available, true);
-  assert.equal(result.notes, '新版本更新内容');
-  assert.equal(packageProbed, true);
-  assert.ok(
-    result.command.endsWith('update @dpskk2/dsh-chatsync@' + newer + ' --registry=https://registry.npmjs.org/'),
-  );
-  assert.match(result.command, /plugin --profile (web|desktop) update @dpskk2\/dsh-chatsync/);
-  assert.equal((await request('update', { install: true })).ok, false);
+test('private fork does not register an update route', async t => {
+  assert.equal((await host(t)).routes.has('/dsh-sync/api/update'), false);
 });
 
 test('content range API rejects nonboolean fields and persists the effective selection', async t => {
   let home;
-  const request = host(t, {}, dir => {
+  const request = await host(t, {}, dir => {
     home = dir;
   });
   const before = fs.readFileSync(path.join(home, 'dsh-sync.json'));
@@ -264,7 +228,7 @@ test('content range API rejects nonboolean fields and persists the effective sel
 });
 
 test('restart repair is enabled by default and preserves an explicit opt-out', async t => {
-  const request = host(t);
+  const request = await host(t);
   assert.equal((await request('config')).config.autoRestartAfterRepair, true);
   assert.equal((await request('config', { autoRestartAfterRepair: false })).config.autoRestartAfterRepair, false);
   assert.equal((await request('config')).config.autoRestartAfterRepair, false);
@@ -272,7 +236,7 @@ test('restart repair is enabled by default and preserves an explicit opt-out', a
 });
 
 test('connection API round trips HTTPS and SSH and preserves unrelated settings', async t => {
-  const request = host(t);
+  const request = await host(t);
   for (const remote of [
     'https://github.com/alice/existing.git',
     'git@github.com:alice/existing.git',
@@ -291,7 +255,7 @@ test('connection API round trips HTTPS and SSH and preserves unrelated settings'
 });
 
 test('invalid connections are rejected without changing existing configuration', async t => {
-  const request = host(t);
+  const request = await host(t);
   const before = (await request('config')).config;
   for (const patch of [
     { remote: 'https://token@github.com/alice/data' },
@@ -310,7 +274,7 @@ test('invalid connections are rejected without changing existing configuration',
 
 test('saving preferences never overwrites malformed existing JSON', async t => {
   let file;
-  const request = host(t, {}, home => {
+  const request = await host(t, {}, home => {
     file = path.join(home, 'dsh-sync.json');
   });
   fs.writeFileSync(file, '{ broken');
@@ -319,7 +283,7 @@ test('saving preferences never overwrites malformed existing JSON', async t => {
 });
 
 test('overlapping connection and preference saves retain both changes', async t => {
-  const request = host(t);
+  const request = await host(t);
   const results = await Promise.all([
     request('config', { branch: 'sync/new' }),
     request('config', { workspaceSync: false }),
@@ -331,7 +295,7 @@ test('overlapping connection and preference saves retain both changes', async t 
 });
 
 test('config response reports effective host overrides, not just saved preferences', async t => {
-  const request = host(t, { mode: 'manual' });
+  const request = await host(t, { mode: 'manual' });
   const result = await request('config', { mode: 'auto' });
   assert.equal(result.saved.mode, 'auto');
   assert.equal(result.config.mode, 'manual');
@@ -341,7 +305,7 @@ test('config response reports effective host overrides, not just saved preferenc
 /* 「自动调度是什么意思」的另一半:界面必须能改它的开关与周期(原先只能手改 dsh-sync.json)。 */
 test('auto scheduling can be toggled and its interval changed from the API', async t => {
   let file;
-  const request = host(t, {}, home => {
+  const request = await host(t, {}, home => {
     file = path.join(home, 'dsh-sync.json');
   });
   const off = await request('config', { enabled: false });
@@ -365,7 +329,7 @@ test('auto scheduling can be toggled and its interval changed from the API', asy
 
 test('invalid scheduling values are rejected without changing the file', async t => {
   let file;
-  const request = host(t, {}, home => {
+  const request = await host(t, {}, home => {
     file = path.join(home, 'dsh-sync.json');
   });
   const before = fs.readFileSync(file, 'utf8');
@@ -384,10 +348,12 @@ test('invalid scheduling values are rejected without changing the file', async t
 /* 「正在生成」的会话在界面要显示**会话名**(现在按会话名显示,而不是 session-<uuid>)。 */
 test('status reports active sessions with the projection title for the restart guide', async t => {
   const id = 'session-11111111-2222-3333-4444-555555555555';
-  const request = host(t, {}, home => {
+  const request = await host(t, {}, home => {
     const dir = path.join(home, 'sessions', 'g1', id);
     fs.mkdirSync(dir, { recursive: true });
     fs.writeFileSync(path.join(dir, 'session.v3.jsonl.zstd'), 'placeholder');
+    const written = new Date(Date.now() - 1000);
+    fs.utimesSync(path.join(dir, 'session.v3.jsonl.zstd'), written, written);
     const cache = path.join(home, 'storages', 'session_projcache', 'sessions');
     fs.mkdirSync(cache, { recursive: true });
     fs.writeFileSync(
@@ -409,8 +375,8 @@ test('status reports active sessions with the projection title for the restart g
   assert.equal(entry.name, '0.20.1文本修正');
 });
 
-test('removed independent backup routes are not registered', t => {
-  const request = host(t);
+test('removed independent backup routes are not registered', async t => {
+  const request = await host(t);
   assert.equal(
     [...request.routes.keys()].some(route => route.includes('webdav')),
     false,
@@ -423,7 +389,7 @@ test('connection API verifies a custom private destination while default setup s
     calls.push(args);
     return { code: 0, out: '{"visibility":"PRIVATE","viewerPermission":"WRITE"}' };
   });
-  const request = host(t);
+  const request = await host(t);
   const custom = await request('connection', { remote: 'https://github.com/team/dsh-sync2.git', expectedRemote: '' });
   assert.equal(custom.ok, true);
   assert.equal(custom.config.autoRepo, false);
@@ -438,7 +404,7 @@ test('connection API verifies a custom private destination while default setup s
 });
 
 test('sidebar visibility defaults on, persists separately and validates boolean values', async t => {
-  const request = host(t);
+  const request = await host(t);
   const before = (await request('config')).config;
   assert.equal(before.showSidebarSync, true);
   const off = await request('config', { showSidebarSync: false });
@@ -461,7 +427,7 @@ test('sidebar-only writes remain available during synchronization without allowi
     engine = this;
     return original.call(this);
   });
-  const request = host(t);
+  const request = await host(t);
   engine.progress = { running: true };
   engine.inFlight = Promise.resolve();
   try {
@@ -481,7 +447,7 @@ test('sidebar-only writes remain available during synchronization without allowi
 });
 
 test('workspace history repair API requires an explicit POST preview and rejects arbitrary confirmation IDs', async t => {
-  const request = host(t);
+  const request = await host(t);
   assert.equal((await request('workspace-history/preview')).ok, false);
   assert.equal((await request('workspace-history/apply', { previewId: '../../arbitrary' })).ok, false);
   const result = await request('workspace-history/preview', { workspaceId: 'missing' });
@@ -491,7 +457,7 @@ test('workspace history repair API requires an explicit POST preview and rejects
 
 test('local storage API scans, saves retention and requires a concrete confirmed preview', async t => {
   let file;
-  const request = host(t, {}, home => {
+  const request = await host(t, {}, home => {
     file = path.join(home, '.chatsync-local/config-history/fixture.json');
     fs.mkdirSync(path.dirname(file), { recursive: true });
     fs.writeFileSync(file, 'backup');

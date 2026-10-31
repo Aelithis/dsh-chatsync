@@ -1,10 +1,13 @@
 <div align="center">
 
 # chatsync 接着聊
+
+本仓库是 Aelithis 私人分支，面向配套 DSH Private 的项目目录映射接口。已移除上游更新检查；使用审查后的固定提交，不按下方上游 npm 安装说明覆盖私人版本。项目根按本机选择，目录变更以共享项目坐标记录；Mac 自动重启暂不提供，需手动重新打开应用。内容加密未启用。
+
 ### 换台电脑，继续做。
 
 把 DeepSeek Harness（DSH）的会话、附件、设置和项目文件带到另一台电脑。<br>
-数据存放在你自己的 **私有 Git 仓库**中：默认 GitHub，也可以用 Gitee、GitLab 等。
+数据存放在你自己的 **私有 Git 仓库**中：默认 GitHub，也可以用 Gitee、GitLab 等。内容以明文保存，私有仓库及敏感信息扫描不等于加密。首次连接默认关闭自动同步，由设置页明确开启。
 
 [![npm](https://img.shields.io/npm/v/chatsync?color=2563eb)](https://www.npmjs.com/package/chatsync)
 [![DSH](https://img.shields.io/badge/DSH-%E2%89%A50.2.0--rc.1-0f766e)](#兼容性)
@@ -54,7 +57,7 @@ dsh plugin --profile web add chatsync
 
 ## 更新方式
 
-**如果原先安装的是 `@dpskk2/dsh-chatsync`，把命令中的 `chatsync` 换成原包名。** 插件更新提醒可关闭，不会自动安装更新。
+**如果原先安装的是 `@dpskk2/dsh-chatsync`，把命令中的 `chatsync` 换成原包名。** 此私人版本不包含自动更新检查。
 
 **Web 端：**
 

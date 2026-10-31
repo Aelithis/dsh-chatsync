@@ -45,7 +45,7 @@ if (shortName) {
   const manifest = path.join(stage, 'package.json');
   const staged = JSON.parse(fs.readFileSync(manifest, 'utf8'));
   if (staged.name !== '@dpskk2/dsh-chatsync') throw new Error('Unexpected source package identity');
-  for (const file of ['lib/client.js', 'lib/updates.js', 'cordis.patch.yml']) {
+  for (const file of ['lib/client.js', 'cordis.patch.yml']) {
     const target = path.join(stage, file);
     fs.writeFileSync(
       target,

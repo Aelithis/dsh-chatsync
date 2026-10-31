@@ -135,7 +135,6 @@ function Section(props) {
     'div',
     { className: 'dss-wrap' },
     e('style', null, STYLE),
-    e(UpdateNotice, null),
     currentPage === 'loading' ? e('div', { className: 'dss-desc', role: 'status' }, '正在读取同步状态…') : null,
     statusError
       ? e(

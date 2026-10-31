@@ -12,7 +12,10 @@ import path from 'node:path';
 // readonly objects. Only teardown changes their permissions; product I/O keeps
 // using the host's normal filesystem and every assertion still runs.
 export function removeFixture(root) {
-  const resolved = path.resolve(root),
+  const lexical = path.resolve(root),
+    resolved = fs.existsSync(lexical)
+      ? fs.realpathSync(lexical)
+      : path.join(fs.realpathSync(path.dirname(lexical)), path.basename(lexical)),
     temp = fs.realpathSync(os.tmpdir());
   const inside = value => {
     const relative = path.relative(temp, value);
@@ -21,7 +24,7 @@ export function removeFixture(root) {
   if (!inside(resolved) || !/^(?:chatsync|dsh)-/.test(path.basename(resolved)))
     throw new Error('Refusing to remove a non-fixture root');
   if (!fs.existsSync(resolved)) return;
-  if (fs.lstatSync(resolved).isSymbolicLink() || !inside(fs.realpathSync(resolved)))
+  if (fs.lstatSync(lexical).isSymbolicLink() || !inside(fs.realpathSync(resolved)))
     throw new Error('Refusing to follow a fixture root link');
   // Remove links before native recursive deletion. Electron's recursive remover
   // can otherwise traverse a Windows junction even when lstat identifies it.

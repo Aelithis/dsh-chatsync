@@ -1,10 +1,13 @@
 <div align="center">
 
 # chatsync · Pick up where you left off
+
+This is the Aelithis private branch for the companion DSH Private project-mapping API. Upstream update checks are removed. Use a reviewed pinned commit rather than the upstream npm installation instructions below. Project directories are selected per device and directory changes use shared project coordinates. Automatic restart on macOS is not provided; reopen the app manually. Content encryption is not enabled.
+
 ### Switch computers. Keep working.
 
 Bring your DeepSeek Harness (DSH) sessions, attachments, settings and project files to another computer.<br>
-Your data stays in your own **private Git repository**: GitHub by default, or Gitee, GitLab and other Git hosts.
+Your data stays in your own **private Git repository**: GitHub by default, or Gitee, GitLab and other Git hosts. Contents are stored in plaintext; repository privacy and sensitive-content scanning are not encryption. Automatic sync is off for new connections and must be enabled in settings.
 
 [![npm](https://img.shields.io/npm/v/chatsync?color=2563eb)](https://www.npmjs.com/package/chatsync)
 [![DSH](https://img.shields.io/badge/DSH-%E2%89%A50.2.0--rc.1-0f766e)](#compatibility)
@@ -54,7 +57,7 @@ You can also download a package from [GitHub Releases](https://github.com/dpskk2
 
 ## Updating
 
-**If you originally installed `@dpskk2/dsh-chatsync`, replace `chatsync` in the commands with that package name.** Update notices can be turned off and never install updates automatically.
+**If you originally installed `@dpskk2/dsh-chatsync`, replace `chatsync` in the commands with that package name.** This private fork does not include automatic update checks.
 
 **Web:**
 

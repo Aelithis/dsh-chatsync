@@ -36,7 +36,7 @@ const selected = names.filter(
 );
 for (const name of selected) {
   let bytes = execFileSync('git', ['show', 'HEAD:' + name], { cwd: root, maxBuffer: 8 * 1024 * 1024 });
-  if (['lib/client.js', 'lib/updates.js', 'cordis.patch.yml'].includes(name))
+  if (['lib/client.js', 'cordis.patch.yml'].includes(name))
     bytes = Buffer.from(
       bytes.toString().replaceAll('@dpskk2/dsh-chatsync', 'chatsync').replaceAll('@dpskk2%2Fdsh-chatsync', 'chatsync'),
     );
@@ -78,7 +78,7 @@ const result = {
   version: pkg.version,
   file,
   sha256,
-  identityChanges: ['package.json', 'cordis.patch.yml', 'lib/client.js', 'lib/updates.js'],
+  identityChanges: ['package.json', 'cordis.patch.yml', 'lib/client.js'],
 };
 if (verify) {
   const manifest = JSON.parse(fs.readFileSync(path.join(root, 'release-evidence', pkg.version, 'manifest.json')));

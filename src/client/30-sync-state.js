@@ -154,23 +154,3 @@ function useSync() {
     review: review || (status?.lastDetail?.needsReview && !status.lastDetail.privacy ? status.lastDetail.review : null),
   };
 }
-
-// Shared request for the sidebar and settings; never poll alongside sync progress.
-let updateRequest = null,
-  updateRequestExpires = 0;
-const updateShown = new Set();
-function loadUpdate() {
-  if (!updateRequest || Date.now() >= updateRequestExpires) {
-    updateRequestExpires = Date.now() + 6 * 60 * 60 * 1000;
-    updateRequest = API.update()
-      .then(data => {
-        if (!data || !data.ok) updateRequestExpires = Date.now() + 10 * 60 * 1000;
-        return data;
-      })
-      .catch(() => {
-        updateRequestExpires = Date.now() + 10 * 60 * 1000;
-        return null;
-      });
-  }
-  return updateRequest;
-}

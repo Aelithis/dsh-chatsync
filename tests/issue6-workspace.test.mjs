@@ -70,6 +70,7 @@ test(
     fs.mkdirSync(secondHome);
     const second = new SyncEngine(secondHome, { remote, autoRepo: false });
     second._gitEnv = f.env;
+    second.setLocalWorkspacePath(f.ws.id, secondProject);
     const restored = await second.syncWorkspace(
       { ...f.ws, path: secondProject },
       second.loadConfig(),

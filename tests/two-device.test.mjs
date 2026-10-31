@@ -192,7 +192,7 @@ test(
       path.join(homeA, 'storages', 'workspace.json'),
       JSON.stringify({ tables: { workspaces: { 'test-workspace': { path: projectA, title: 'example' } } } }),
     );
-    const a = acceptFixturePreviews(new SyncEngine(homeA));
+    const a = acceptFixturePreviews(new SyncEngine(homeA, { autoRepo: true }));
     const b = acceptFixturePreviews(
       new SyncEngine(homeB, { remote, autoRepo: false, workspaceBase: path.join(root, 'projects-b') }),
     );

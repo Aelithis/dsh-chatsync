@@ -220,3 +220,15 @@ test('existing mirror hashes cannot bypass projection of old stored settings', a
   await h.sync(a);
   assert.doesNotMatch(h.remoteText(profile), /local-key-a|local-proxy-a/);
 });
+
+test('explicit credential, environment and header entrances remain local', () => {
+  const local = Buffer.from(
+    'plugin:\n  name: sample\n  clientSecret: short\n  credentials: { user: local }\n  env: { MY_API_KEY: short }\n  headers: { Authorization: Bearer-local }\n  label: shared\n',
+  );
+  const projected = settingsProjection(local).value.toString();
+  assert.match(projected, /label: shared/);
+  assert.doesNotMatch(projected, /short|Bearer-local|MY_API_KEY|credentials/);
+  const restored = restoreLocalSettings(Buffer.from('plugin:\n  name: sample\n  label: remote\n'), local).toString();
+  assert.match(restored, /MY_API_KEY/);
+  assert.match(restored, /Bearer-local/);
+});

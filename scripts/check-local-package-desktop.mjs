@@ -68,7 +68,7 @@ if (!process.versions.electron) {
           cwd: repo,
           windowsHide: true,
         });
-    if (packed.name === 'chatsync' && ['lib/client.js', 'lib/updates.js'].includes(relative))
+    if (packed.name === 'chatsync' && ['lib/client.js'].includes(relative))
       expected = Buffer.from(
         expected
           .toString()

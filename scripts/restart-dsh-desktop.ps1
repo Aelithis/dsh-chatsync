@@ -13,7 +13,8 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
-$logDir = Join-Path $env:USERPROFILE '.dsh\logs'
+$homePath = if ($SyncHome) { $SyncHome } elseif ($env:DSH_HOME) { $env:DSH_HOME } else { throw 'Missing explicit DSH home' }
+$logDir = Join-Path $homePath 'logs'
 $logFile = Join-Path $logDir 'restart-dsh-desktop.log'
 New-Item -ItemType Directory -Path $logDir -Force | Out-Null
 
@@ -31,19 +32,19 @@ function Wait-Exited([int]$processId, [int]$seconds) {
 
 try {
     $hostProcess = Get-CimInstance Win32_Process -Filter "ProcessId=$HostPid"
-    if (-not $hostProcess -or $hostProcess.Name -ne 'DeepSeek Harness.exe' -or
+    if (-not $hostProcess -or $hostProcess.Name -notin @('DeepSeek Harness.exe', 'DSH Private.exe') -or
         $hostProcess.CommandLine -notmatch 'dsh-desktop-host[\\/]lib[\\/]index\.js') {
         throw "PID $HostPid is not the DSH Desktop Host"
     }
     $parent = Get-CimInstance Win32_Process -Filter "ProcessId=$($hostProcess.ParentProcessId)"
-    if (-not $parent -or $parent.Name -ne 'DeepSeek Harness.exe' -or
+    if (-not $parent -or $parent.Name -ne $hostProcess.Name -or
         $parent.CommandLine -match '--type=|--expose-internals' -or
         -not $parent.ExecutablePath -or -not (Test-Path -LiteralPath $parent.ExecutablePath -PathType Leaf)) {
         throw 'Desktop main process could not be verified'
     }
     $mainPid = [int]$parent.ProcessId
     $exe = [System.IO.Path]::GetFullPath($parent.ExecutablePath)
-    if ([System.IO.Path]::GetFileName($exe) -ne 'DeepSeek Harness.exe') {
+    if ([System.IO.Path]::GetFileName($exe) -ne $hostProcess.Name) {
         throw 'Unexpected Desktop executable path'
     }
     Write-Log "Verified Desktop main PID $mainPid and Host PID $HostPid"

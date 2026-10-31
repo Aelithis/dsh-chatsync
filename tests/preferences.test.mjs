@@ -617,7 +617,7 @@ test('startup errors stay nonmodal until an old-session send is attempted', asyn
   );
   h.render();
   await h.effects();
-  assert.equal(h.render().type.name, 'UpdateNotice');
+  assert.equal(h.render(), null);
   assert.equal(
     all(h.render()).some(n => n.type === 'dialog'),
     false,
@@ -776,7 +776,7 @@ test('startup running, offline and old review snapshots never open a dialog by t
       false,
       phase,
     );
-    assert.equal(h.render().type.name, 'UpdateNotice');
+    assert.equal(h.render(), null);
   }
 });
 

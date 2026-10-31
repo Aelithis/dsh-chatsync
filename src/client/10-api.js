@@ -87,7 +87,6 @@ const API = {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     }).then(r => r.json()),
-  update: () => fetch('/dsh-sync/api/update').then(r => r.json()),
   progress: () => fetch('/dsh-sync/api/progress').then(r => r.json()),
   config: () => fetch('/dsh-sync/api/config').then(r => r.json()),
   saveConnection: patch =>
@@ -193,13 +192,6 @@ function bubble(anchor, text, ok) {
 }
 
 const STYLE = [
-  '.dss-update{box-sizing:border-box;padding:12px 14px;border:.5px solid var(--dsw-alias-border-l2,rgba(127,127,127,.25));border-radius:12px;background:var(--dsw-alias-bg-layer-2,#fff);color:var(--dsw-alias-label-secondary,#666);font-size:12px;line-height:1.65}',
-  '.dss-update-popup{position:fixed;z-index:40;width:min(360px,calc(100vw - 32px));max-height:calc(100dvh - 72px);overflow:auto;font-size:14px;color:var(--dsw-alias-label-primary,#202124);box-shadow:0 2px 10px rgba(0,0,0,.08);animation:dss-update-in .6s ease-out}',
-  '@keyframes dss-update-in{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:translateY(0)}}',
-  '@media(prefers-reduced-motion:reduce){.dss-update-popup{animation:none}}',
-  '.dss-update-heading{display:flex;align-items:center;gap:8px;justify-content:space-between}.dss-update-heading h2{font:inherit;font-weight:600;margin:0}',
-  'button.dss-update-close{display:inline-flex;align-items:center;justify-content:center;flex:none;box-sizing:border-box;width:28px;height:28px;padding:0;border:0;border-radius:6px;background:transparent;color:var(--dsw-alias-label-secondary,#6b7078);cursor:pointer}button.dss-update-close:hover{background:var(--dsw-alias-interactive-bg-hover,rgba(127,127,127,.12));color:var(--dsw-alias-label-primary,#202124)}button.dss-update-close:focus-visible{outline:2px solid #4d6bfe;outline-offset:2px}.dss-close-mark{position:relative;width:12px;height:12px;pointer-events:none}.dss-close-mark:before,.dss-close-mark:after{content:"";position:absolute;left:0;top:5.25px;width:12px;height:1.5px;background:currentColor;border-radius:1px;transform:rotate(45deg)}.dss-close-mark:after{transform:rotate(-45deg)}@media(pointer:coarse){button.dss-update-close{width:44px;height:44px}}',
-  '.dss-update-notes{white-space:pre-wrap;overflow-wrap:anywhere;margin:8px 0;max-height:150px;overflow:auto}.dss-update-actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.dss-update a{color:inherit}.dss-update summary{cursor:pointer}.dss-update-feedback{margin-top:8px;overflow-wrap:anywhere}.dss-update pre{white-space:pre-wrap;user-select:text}',
   '@keyframes dss-spin{to{transform:rotate(360deg)}}',
   /* 结果/进度气泡 */
   '.dss-bubble{box-sizing:border-box;position:fixed;z-index:2147483000;max-width:min(340px,calc(100vw - 24px));padding:8px 12px;border-radius:10px;overflow-wrap:anywhere;',

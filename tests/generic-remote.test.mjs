@@ -210,6 +210,52 @@ test('real Git: a login-protected repository is private even with stored credent
   );
 });
 
+test('anonymous probe ignores URL-specific authorization and injected Git configuration', async t => {
+  const server = await gitServer(t, 'private');
+  const engine = probingEngine(t, server.root);
+  const config = engine._gitEnv.GIT_CONFIG_GLOBAL;
+  fs.appendFileSync(
+    config,
+    '\n[http "' + server.url + '"]\n\textraHeader = Authorization: Basic c3RvcmVkOnNlY3JldA==\n',
+  );
+  Object.assign(engine._gitEnv, {
+    GIT_CONFIG_COUNT: '1',
+    GIT_CONFIG_KEY_0: 'http.extraHeader',
+    GIT_CONFIG_VALUE_0: 'Authorization: Basic c3RvcmVkOnNlY3JldA==',
+  });
+  const legacy = await engine._spawn(
+    'git',
+    [
+      '-c',
+      'credential.helper=',
+      '-c',
+      'core.askPass=',
+      '-c',
+      'http.extraHeader=',
+      '-c',
+      'http.emptyAuth=false',
+      'ls-remote',
+      '--heads',
+      server.url,
+    ],
+    30000,
+    {
+      useGitEnv: true,
+      env: { ...engine._gitEnv, GIT_TERMINAL_PROMPT: '0', GIT_ASKPASS: '', SSH_ASKPASS: '', GCM_INTERACTIVE: 'never' },
+      cwd: os.tmpdir(),
+    },
+  );
+  assert.equal(legacy.code, 0, legacy.err);
+  assert.ok(
+    server.seen.some(r => r.authorization),
+    'legacy URL-specific configuration leaks credentials',
+  );
+  server.seen.length = 0;
+  await engine.anonymousRead(server.url);
+  assert.ok(server.seen.length);
+  assert.ok(server.seen.every(r => !r.authorization));
+});
+
 test('real Git: an anonymously readable repository is refused as public', async t => {
   const server = await gitServer(t, 'public');
   const engine = probingEngine(t, server.root);

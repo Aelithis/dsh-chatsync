@@ -1,7 +1,7 @@
 {
   "name": "@dpskk2/dsh-chatsync",
-  "version": "0.21.1",
-  "chatsyncBuild": "2026-10-30-release-0.21.1",
+  "version": "0.21.2-private.1",
+  "chatsyncBuild": "aelith-private-cross-directory-20261031",
   "description": "换台电脑，接着聊。同步会话、附件、设置和项目文件。",
   "keywords": [
     "dsh",

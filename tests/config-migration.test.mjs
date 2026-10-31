@@ -6,8 +6,8 @@ import path from 'node:path';
 import { resolveSyncConfig, SyncEngine } from '../lib/sync.js';
 import { parseSyncRemote } from '../lib/remote.js';
 
-test('new connections enable automation and legacy manual preferences never gain automatic transfers', () => {
-  assert.equal(resolveSyncConfig().enabled, true);
+test('new connections require explicit automation and legacy manual preferences never gain automatic transfers', () => {
+  assert.equal(resolveSyncConfig().enabled, false);
   assert.equal(resolveSyncConfig({ enabled: false }).enabled, false);
   assert.equal(resolveSyncConfig({ lifecycleAutomation: 1, enabled: false }, { enabled: true }).enabled, false);
   for (const enabled of [undefined, true, false]) {

@@ -44,7 +44,7 @@ test('failed startup retries with bounded backoff, while success, cancellation a
   }
 });
 function setup(initial = {}) {
-  const config = { ...DEFAULT_CONFIG, enabled: true, ...initial },
+  const config = { ...DEFAULT_CONFIG, enabled: true, autoPullOnStart: true, ...initial },
     calls = [];
   let timers = 0;
   const clock = {
@@ -65,10 +65,10 @@ function setup(initial = {}) {
   });
   return { config, calls, scheduler, timerCount: () => timers };
 }
-test('new connections enable automation while startup and exit options remain selectable', () => {
-  assert.equal(DEFAULT_CONFIG.enabled, true);
-  assert.equal(DEFAULT_CONFIG.autoPullOnStart, true);
-  assert.equal(DEFAULT_CONFIG.autoPushOnExit, true);
+test('new connections disable automation while startup and exit options remain selectable', () => {
+  assert.equal(DEFAULT_CONFIG.enabled, false);
+  assert.equal(DEFAULT_CONFIG.autoPullOnStart, false);
+  assert.equal(DEFAULT_CONFIG.autoPushOnExit, false);
 });
 test('both legacy modes and old intervals create no editing or periodic work', async () => {
   for (const mode of ['manual', 'auto']) {
@@ -113,7 +113,7 @@ test('disposal cancels a queued startup without scheduling retries', async () =>
   assert.equal(h.scheduler.active, false);
 });
 test('failed startup does not silently retry while the person edits', async () => {
-  const config = { ...DEFAULT_CONFIG, enabled: true };
+  const config = { ...DEFAULT_CONFIG, enabled: true, autoPullOnStart: true };
   let calls = 0;
   const scheduler = createSyncScheduler({
     loadConfig: () => config,
@@ -130,5 +130,35 @@ test('failed startup does not silently retry while the person edits', async () =
   }
   await settle();
   assert.equal(calls, 1);
+  scheduler.stop();
+});
+
+test('persistent startup failures stop after three retries', async () => {
+  const timers = [],
+    logs = [];
+  let calls = 0;
+  const scheduler = createSyncScheduler({
+    loadConfig: () => ({ enabled: true, autoPullOnStart: true }),
+    sync: async () => {
+      calls++;
+      return { error: 'offline' };
+    },
+    log: (_level, message) => logs.push(message),
+    clock: {
+      setTimeout(fn) {
+        timers.push(fn);
+        return fn;
+      },
+      clearTimeout() {},
+    },
+  });
+  scheduler.refresh({ startup: true });
+  await settle();
+  while (timers.length) {
+    timers.shift()();
+    await settle();
+  }
+  assert.equal(calls, 4);
+  assert.match(logs.at(-1), /重试已达上限/);
   scheduler.stop();
 });

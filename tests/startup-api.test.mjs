@@ -17,7 +17,7 @@ test('startup failure includes file-level issues and technical detail in the mod
     },
     workspaces: { total: 2, synced: 1, errors: [{ id: 'sample', title: 'sample', error: 'push' }] },
   }));
-  const request = host(t, { autoPullOnStart: true });
+  const request = await host(t, { autoPullOnStart: true });
   await new Promise(resolve => setImmediate(resolve));
   const state = await request('startup');
   assert.equal(state.startup.phase, 'error');
@@ -36,7 +36,7 @@ test('startup can approve its exact pending transfer without leaving the modal',
       ? {}
       : { error: '等待确认预览', needsReview: true, review: { id, summary: '准备取回合成测试配置' } };
   });
-  const request = host(t, { autoPullOnStart: true });
+  const request = await host(t, { autoPullOnStart: true });
   await new Promise(resolve => setImmediate(resolve));
   const waiting = await request('status');
   assert.equal(waiting.startup.phase, 'review');
@@ -69,7 +69,7 @@ test('startup accepts the restore answer of a missing-files preview', async t =>
           },
         };
   });
-  const request = host(t, { autoPullOnStart: true });
+  const request = await host(t, { autoPullOnStart: true });
   await new Promise(resolve => setImmediate(resolve));
   assert.equal((await request('status')).startup.phase, 'review');
   await request('startup', { action: 'confirm', approval: restore });
@@ -84,7 +84,7 @@ test('a saved offline preview is recomputed on startup and can be left offline',
     attempts++;
     return { needsReview: true, error: '等待确认', review: { id: 'fresh', summary: '新的预览' } };
   });
-  const request = host(t, { autoPullOnStart: true }, home => {
+  const request = await host(t, { autoPullOnStart: true }, home => {
     fs.writeFileSync(
       path.join(home, '.dsh-sync-status.json'),
       JSON.stringify({
@@ -109,7 +109,7 @@ test('confirmation of an old snapshot displays a new preview instead of reportin
     error: '等待确认',
     review: { id: options.approval ? 'changed' : 'first', summary: '配置变化' },
   }));
-  const request = host(t, { autoPullOnStart: true });
+  const request = await host(t, { autoPullOnStart: true });
   await new Promise(resolve => setImmediate(resolve));
   await request('startup', { action: 'confirm', approval: 'first' });
   await new Promise(resolve => setImmediate(resolve));
@@ -118,7 +118,7 @@ test('confirmation of an old snapshot displays a new preview instead of reportin
   assert.equal(state.review.id, 'changed');
 });
 
-function host(t, overrides = {}, inspect = () => {}) {
+async function host(t, overrides = {}, inspect = () => {}) {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'dsh-config-api-'));
   const routes = new Map(),
     cleanup = [];
@@ -131,7 +131,7 @@ function host(t, overrides = {}, inspect = () => {}) {
     JSON.stringify({ mode: 'manual', autoRepo: false, autoPullOnStart: false, autoPushOnExit: false }),
   );
   inspect(home);
-  apply(
+  await apply(
     {
       webServer: {
         register(route) {
@@ -180,14 +180,14 @@ test('background startup never schedules a restart while editing is allowed', as
     checked = result.restartRequired;
     return true;
   });
-  const request = host(t, { autoPullOnStart: true });
+  const request = await host(t, { autoPullOnStart: true });
   await new Promise(resolve => setImmediate(resolve));
   assert.equal(checked, false);
   assert.equal((await request('startup')).startup.phase, 'ready');
 });
 
 test('startup progress snapshot does not scan sessions or expose configuration', async t => {
-  const request = host(t);
+  const request = await host(t);
   t.mock.method(SyncEngine.prototype, 'sessionActivity', () =>
     assert.fail('progress polling must not scan session logs'),
   );
@@ -209,7 +209,7 @@ test('manual cancellation targets exactly one run, waits for local work and neve
         finish = resolve;
       }),
   );
-  const request = host(t);
+  const request = await host(t);
   const running = request('run', {});
   await new Promise(resolve => setImmediate(resolve));
   const progress = await request('progress');
@@ -255,7 +255,7 @@ test('background startup cancellation is available without a global offline dial
         finish = resolve;
       }),
   );
-  const request = host(t, { autoPullOnStart: true });
+  const request = await host(t, { autoPullOnStart: true });
   await new Promise(resolve => setImmediate(resolve));
   const progress = await request('progress');
   assert.equal(progress.canCancel, true);
@@ -266,7 +266,7 @@ test('background startup cancellation is available without a global offline dial
 });
 
 test('startup and exit protection round trip independently of manual mode', async t => {
-  const request = host(t);
+  const request = await host(t);
   const result = await request('config', { mode: 'manual', autoPullOnStart: true, autoPushOnExit: true });
   assert.equal(result.config.mode, 'manual');
   assert.equal(result.config.autoPullOnStart, true);
@@ -280,7 +280,7 @@ test('startup and exit protection round trip independently of manual mode', asyn
 
 test('required startup failure remains visible until retry or explicit offline choice', async t => {
   t.mock.method(SyncEngine.prototype, 'syncOnce', async () => ({ error: 'network offline' }));
-  const request = host(t, { autoPullOnStart: true });
+  const request = await host(t, { autoPullOnStart: true });
   await new Promise(resolve => setImmediate(resolve));
   const status = await request('status');
   assert.equal(status.startup.required, true);
@@ -293,10 +293,11 @@ test('required startup failure remains visible until retry or explicit offline c
 test('required startup succeeds through retry without changing the manual preference', async t => {
   let failure = true;
   t.mock.method(SyncEngine.prototype, 'syncOnce', async () => (failure ? { error: 'offline' } : { pushed: true }));
-  const request = host(t, { autoPullOnStart: true });
+  const request = await host(t, { autoPullOnStart: true });
   await new Promise(resolve => setImmediate(resolve));
   failure = false;
   await request('startup', { action: 'retry' });
+  await new Promise(resolve => setImmediate(resolve));
   const status = await request('status');
   assert.equal(status.startup.phase, 'ready');
   assert.equal(status.mode, 'manual');
@@ -312,7 +313,7 @@ test('running startup can be cancelled and a late result cannot reopen the gate'
     this.throwIfCancelled();
     return { downloadPending: true };
   });
-  const request = host(t, { autoPullOnStart: true });
+  const request = await host(t, { autoPullOnStart: true });
   await new Promise(resolve => setImmediate(resolve));
   assert.equal((await request('status')).startup.phase, 'running');
   const cancelling = request('startup', { action: 'offline' });
@@ -333,7 +334,7 @@ test('a saved lock collision does not permanently fail subsequent startup attemp
     assert.equal(options.waitForLock, true);
     return {};
   });
-  const request = host(t, { autoPullOnStart: true }, home => {
+  const request = await host(t, { autoPullOnStart: true }, home => {
     fs.writeFileSync(
       path.join(home, '.dsh-sync-status.json'),
       JSON.stringify({ at: 1, source: 'startup-offline', result: { error: '另一 DSH 进程正在同步，请稍后再试。' } }),

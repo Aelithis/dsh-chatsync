@@ -14,7 +14,7 @@ const tempDir = (t, prefix) => {
   return dir;
 };
 
-function host(t) {
+async function host(t) {
   const home = tempDir(t, 'dsh-request-guard-');
   const routes = new Map(),
     cleanup = [];
@@ -23,7 +23,7 @@ function host(t) {
     path.join(home, 'dsh-sync.json'),
     JSON.stringify({ mode: 'manual', autoRepo: false, autoPullOnStart: false, autoPushOnExit: false, enabled: true }),
   );
-  apply(
+  await apply(
     {
       webServer: {
         register(route) {
@@ -99,15 +99,15 @@ test('requests marked by the browser as another site are rejected before any han
     requestRejection({ method: 'POST', headers: { ...same, 'content-length': String(MAX_REQUEST_BYTES + 1) } }),
     'too-large',
   );
-  // Desktop pages served through an app scheme are not HTTP origins and are left to the host.
+  // Desktop proxy removes app origins before forwarding requests to the host.
   assert.equal(
     requestRejection({ method: 'POST', headers: { ...same, origin: 'app://dsh', 'sec-fetch-site': 'same-origin' } }),
-    null,
+    'invalid-origin',
   );
 });
 
 test('a cross-site settings change is refused and leaves the configuration file untouched', async t => {
-  const request = host(t);
+  const request = await host(t);
   const body = Buffer.from(JSON.stringify({ proxy: 'http://attacker.example:8080' }));
   const refused = await request('config', {
     headers: {
@@ -126,7 +126,7 @@ test('a cross-site settings change is refused and leaves the configuration file 
 });
 
 test('request bodies are decoded after all chunks, so split Chinese characters survive', async t => {
-  const request = host(t);
+  const request = await host(t);
   const target = path.join(tempDir(t, 'dsh-request-utf8-'), '项目文件夹');
   const bytes = Buffer.from(JSON.stringify({ workspaceId: 'ws-utf8', path: target }));
   const split = bytes.indexOf(Buffer.from('项')) + 1; // inside the three-byte character
@@ -137,14 +137,14 @@ test('request bodies are decoded after all chunks, so split Chinese characters s
 });
 
 test('oversized request bodies are rejected without being buffered completely', async t => {
-  const request = host(t);
+  const request = await host(t);
   const chunk = Buffer.alloc(1024 * 1024, 0x20);
   const result = await request('workspace/path', { chunks: Array.from({ length: 5 }, () => chunk) });
   assert.equal(result.body.ok, false);
   assert.match(result.body.error, /过大/);
 });
 
-test('imported files are replaced atomically and keep permissions', t => {
+test('imported files are replaced atomically and keep permissions', async t => {
   const dir = tempDir(t, 'dsh-replace-bytes-');
   const file = path.join(dir, 'settings.yaml');
   fs.writeFileSync(file, 'old: 1\n');
@@ -159,7 +159,7 @@ test('imported files are replaced atomically and keep permissions', t => {
   assert.equal(fs.readFileSync(path.join(dir, 'nested', 'new.json'), 'utf8'), '{}');
 });
 
-test('imported files write through symbolic links instead of replacing them', t => {
+test('imported files write through symbolic links instead of replacing them', async t => {
   const dir = tempDir(t, 'dsh-replace-link-');
   const real = path.join(dir, 'dotfiles-settings.yaml'),
     link = path.join(dir, 'linked.yaml');
@@ -189,7 +189,7 @@ test('imported files write through symbolic links instead of replacing them', t 
   assert.equal(fs.readFileSync(real, 'utf8'), 'a: 2\n');
 });
 
-test('a failed replacement reports its own error even when the temporary file cannot be removed', t => {
+test('a failed replacement reports its own error even when the temporary file cannot be removed', async t => {
   const dir = tempDir(t, 'dsh-replace-fail-');
   const file = path.join(dir, 'settings.yaml');
   fs.writeFileSync(file, 'old: 1\n');
@@ -237,4 +237,14 @@ test('a session caught mid-append is re-read, reported as busy while growing, an
   const stable = await readSettledSession(file, fs.readFileSync(file), { attempts: 3, delayMs: 10 });
   assert.equal(stable.changing, undefined);
   assert.equal(stable.bytes.toString(), header + row(0) + row(5));
+});
+
+test('origin includes protocol and only accepts HTTP origins forwarded by the host', () => {
+  const req = { method: 'GET', headers: { host: 'localhost:7000', origin: 'https://localhost:7000' } };
+  assert.equal(requestRejection(req), 'cross-origin');
+  assert.equal(requestRejection({ ...req, socket: { encrypted: true } }), null);
+  assert.equal(
+    requestRejection({ headers: { host: 'localhost:7000', origin: 'file://localhost:7000' } }),
+    'invalid-origin',
+  );
 });

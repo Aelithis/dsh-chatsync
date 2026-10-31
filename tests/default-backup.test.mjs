@@ -22,7 +22,7 @@ function fakeGh(t, respond) {
 function fixture(t) {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'dsh-default-backup-'));
   t.after(() => removeFixture(home));
-  return new SyncEngine(home);
+  return new SyncEngine(home, { autoRepo: true });
 }
 const missingCli = () => ({ code: -1, err: 'Error: spawn gh ENOENT' });
 const loggedOut = () => ({ code: 1, err: 'To get started with GitHub CLI, please run:  gh auth login' });
@@ -132,7 +132,7 @@ test('checking the default backup lets the next manual sync retry immediately', 
   assert.equal(engine._bootstrapAt, 0);
 });
 
-function host(t) {
+async function host(t) {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'dsh-default-backup-api-'));
   const routes = new Map(),
     cleanup = [];
@@ -144,7 +144,7 @@ function host(t) {
     path.join(home, 'dsh-sync.json'),
     JSON.stringify({ mode: 'manual', autoPullOnStart: false, autoPushOnExit: false, enabled: true }),
   );
-  apply(
+  await apply(
     {
       webServer: {
         register(route) {
@@ -178,7 +178,7 @@ function host(t) {
 test('status and the connection check endpoint expose why the default backup is not connected', async t => {
   fakeGh(t, missingCli);
   t.mock.method(SyncEngine.prototype, 'remoteNotice', () => '未找到 GitHub CLI。');
-  const request = host(t);
+  const request = await host(t);
   const status = await request('status');
   assert.equal(status.remote, '');
   assert.equal(status.remoteNotice, '未找到 GitHub CLI。');

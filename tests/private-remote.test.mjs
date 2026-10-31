@@ -25,6 +25,7 @@ test('missing Git produces an error outcome and never starts workspace sync', as
 
 test('auto setup refuses an existing public repository without saving remote', async t => {
   const engine = fixture(t);
+  engine.overrides.autoRepo = true;
   engine.gh = async () => ({ code: 0, out: '{"visibility":"PUBLIC"}', err: '' });
   assert.equal(await engine.bootstrapRemote({ repoName: 'dsh-sync' }), null);
   assert.equal(fs.existsSync(engine.configPath()), false);

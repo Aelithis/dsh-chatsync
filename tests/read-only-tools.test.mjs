@@ -23,7 +23,7 @@ test('host registers three read-only tools, without transmitting content or chan
   );
   fs.writeFileSync(path.join(home, '.credentials.yaml'), 'secret: test-only-do-not-expose');
   const before = fs.readdirSync(home);
-  apply(
+  await apply(
     {
       webServer: {
         register() {
@@ -69,7 +69,7 @@ test('host registers three read-only tools, without transmitting content or chan
   assert.deepEqual(fs.readdirSync(path.join(home, '.dsh-sync-hosts')), [process.pid + '.json']);
 });
 
-test('a host without the web server keeps the plugin and its read-only tools running', t => {
+test('a host without the web server keeps the plugin and its read-only tools running', async t => {
   const home = fs.mkdtempSync(path.join(os.tmpdir(), 'chatsync-noweb-'));
   const cleanup = [],
     tools = new Map(),
@@ -82,7 +82,7 @@ test('a host without the web server keeps the plugin and its read-only tools run
     path.join(home, 'dsh-sync.json'),
     JSON.stringify({ mode: 'manual', autoRepo: false, autoPullOnStart: false, autoPushOnExit: false }),
   );
-  assert.doesNotThrow(() =>
+  await assert.doesNotReject(() =>
     apply(
       {
         tools: {
