@@ -11,8 +11,6 @@ jobs:
         os: [macos-15, windows-2025]
     runs-on: ${{ matrix.os }}
     timeout-minutes: 35
-    env:
-      TMPDIR: ${{ runner.temp }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
@@ -22,6 +20,8 @@ jobs:
           node-version: '24.22.1'
       - run: npm ci --ignore-scripts
       - name: 隔离回归与打包检查
+        env:
+          TMPDIR: ${{ runner.temp }}
         run: |
           npm test
           npm exec -- node scripts/check-package-contents.mjs
