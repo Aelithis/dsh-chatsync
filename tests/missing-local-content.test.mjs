@@ -83,6 +83,35 @@ test(
   },
 );
 
+test('a new device keeps shared project groups when it already has a local registry', { timeout: 120000 }, async t => {
+  const { make, put, sync } = devices(t);
+  const a = make('a'),
+    b = make('b');
+  const file = 'storages/workspace.json';
+  put(a, sessionFile, sessionLog);
+  const shared = JSON.parse(registry);
+  shared.global.workspaceIds.push('other');
+  shared.tables.workspaces.other = { path: '/shared/other', sessionIds: [] };
+  put(a, file, JSON.stringify(shared));
+  assert.equal((await sync(a)).error, undefined);
+
+  const local = JSON.parse(registry);
+  local.tables.workspaces.w.sessionIds = [];
+  local.global.workspaceIds.push('local');
+  local.tables.workspaces.local = { path: '/shared/local', sessionIds: [] };
+  put(b, file, JSON.stringify(local));
+
+  const joined = await sync(b);
+  assert.equal(joined.error, undefined, JSON.stringify(joined));
+  assert.equal((await sync(a)).error, undefined);
+  for (const device of [a, b]) {
+    const actual = JSON.parse(fs.readFileSync(path.join(device.home, file), 'utf8'));
+    assert.deepEqual(actual.tables.workspaces.w.sessionIds, [id]);
+    assert.equal(actual.tables.workspaces.other.path, '/shared/other');
+    assert.equal(actual.tables.workspaces.local.path, '/shared/local');
+  }
+});
+
 test('an explicit removal receipt still removes the session from the shared copy', { timeout: 120000 }, async t => {
   const { make, put, has, remoteFiles, sync } = devices(t);
   const a = make('a');
