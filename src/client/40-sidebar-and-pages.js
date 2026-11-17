@@ -1,65 +1,119 @@
 /* ---------- 侧栏入口与页面 ---------- */
 let sidebarBinding = null,
-  sidebarLoad = null;
-let sidebarState = { value: null, loading: false, saving: false, error: '' };
-const sidebarListeners = new Set();
-function publishSidebarState(patch) {
-  sidebarState = { ...sidebarState, ...patch };
-  for (const listener of sidebarListeners) listener(sidebarState);
+  preferenceLoad = null;
+let pluginPreferences = { config: null, saving: false, error: '' };
+const preferenceListeners = new Set();
+function publishPreferences(patch) {
+  pluginPreferences = { ...pluginPreferences, ...patch };
+  for (const listener of preferenceListeners) listener(pluginPreferences);
 }
-function acceptSidebarConfig(data) {
-  if (!data?.ok || !data.config) throw new Error(data?.error || '无法读取侧边栏设置');
-  const value = data.config.showSidebarSync !== false;
-  sidebarBinding?.(value);
-  publishSidebarState({ value });
-  return value;
+function acceptPreferences(data) {
+  if (!data?.ok || !data.config) throw new Error(data?.error || '无法读取插件设置');
+  sidebarBinding?.(data.config.showSidebarSync !== false);
+  publishPreferences({ config: data.config });
 }
-function loadSidebarPreference() {
-  if (sidebarLoad) return sidebarLoad;
-  publishSidebarState({ loading: true, error: '' });
-  sidebarLoad = API.config()
-    .then(acceptSidebarConfig)
+function loadPluginPreferences() {
+  if (preferenceLoad) return preferenceLoad;
+  publishPreferences({ error: '' });
+  preferenceLoad = API.config()
+    .then(acceptPreferences)
     .catch(error => {
-      if (sidebarState.value === null) sidebarBinding?.(true);
-      publishSidebarState({ error: error.message || '无法读取侧边栏设置' });
+      if (!pluginPreferences.config) sidebarBinding?.(true);
+      publishPreferences({ error: error.message || '无法读取插件设置' });
     })
     .finally(() => {
-      sidebarLoad = null;
-      publishSidebarState({ loading: false });
+      preferenceLoad = null;
     });
-  return sidebarLoad;
+  return preferenceLoad;
 }
-function useSidebarPreference() {
-  const [state, setState] = useState(sidebarState);
+function usePluginPreferences() {
+  const [state, setState] = useState(pluginPreferences);
   useEffect(() => {
-    sidebarListeners.add(setState);
-    setState(sidebarState);
-    if (sidebarState.value === null) loadSidebarPreference();
-    return () => sidebarListeners.delete(setState);
+    preferenceListeners.add(setState);
+    setState(pluginPreferences);
+    if (!pluginPreferences.config) loadPluginPreferences();
+    return () => preferenceListeners.delete(setState);
   }, []);
   return state;
 }
-async function toggleSidebarPreference() {
-  if (sidebarState.value === null || sidebarState.saving) return;
-  const next = !sidebarState.value;
-  publishSidebarState({ saving: true, error: '' });
+function pluginPreferenceEnabled(config, key) {
+  if (key === 'automatic') return config.automatic ?? config.enabled !== false;
+  return config[key] !== false;
+}
+async function togglePluginPreference(key) {
+  if (!pluginPreferences.config || pluginPreferences.saving) return;
+  const next = !pluginPreferenceEnabled(pluginPreferences.config, key);
+  publishPreferences({ saving: true, error: '' });
   try {
-    const actual = acceptSidebarConfig(await API.saveConfig({ showSidebarSync: next }));
-    if (actual !== next) publishSidebarState({ error: '受宿主设置限制，已显示实际选择。' });
+    const data = await API.saveConfig({ [key]: next });
+    acceptPreferences(data);
+    if (pluginPreferenceEnabled(data.config, key) !== next) publishPreferences({ error: '宿主配置固定了此选项。' });
   } catch (error) {
     try {
-      acceptSidebarConfig(await API.config());
-      publishSidebarState({ error: error.message || '保存失败，请重试' });
+      acceptPreferences(await API.config());
+      publishPreferences({ error: error.message || '保存失败，请重试' });
     } catch {
-      publishSidebarState({ value: null, error: '保存状态未知，请重新读取。' });
+      publishPreferences({ config: null, error: '保存状态未知，请重新读取。' });
     }
   } finally {
-    publishSidebarState({ saving: false });
+    publishPreferences({ saving: false });
   }
 }
 function SidebarVisibilityProvider() {
-  useSidebarPreference();
+  usePluginPreferences();
   return null;
+}
+function PluginPreferences({ view } = {}) {
+  const { config, saving, error } = usePluginPreferences();
+  if (view === 'summary') return null;
+  return e(
+    'div',
+    { className: 'dss-plugin-prefs' },
+    ...[
+      ['showSidebarSync', '侧边栏显示同步', '关闭后仍可从「设置 → 同步」打开。'],
+      ['automatic', '自动同步', '按同步设置中的选项，在启动或退出 DSH 时自动同步。关闭后仍可手动同步。'],
+    ].map(([key, label, description]) => {
+      const checked = Boolean(config && pluginPreferenceEnabled(config, key));
+      const descriptionId = 'dss-plugin-preference-' + key;
+      return e(
+        'div',
+        { className: 'dss-rowline', key },
+        e('div', { className: 'dss-rowtext' }, e('span', null, label), e('small', { id: descriptionId }, description)),
+        e(
+          'button',
+          {
+            type: 'button',
+            role: 'switch',
+            'aria-label': label,
+            'aria-describedby': descriptionId,
+            'aria-checked': checked,
+            disabled: !config || saving,
+            className: 'dss-switch' + (checked ? ' dss-switch-on' : ''),
+            onClick: () => togglePluginPreference(key),
+          },
+          e('span', { className: 'dss-switch-knob' }),
+        ),
+      );
+    }),
+    error ? e('p', { role: 'alert', className: 'dss-err' }, error) : null,
+    !config && error ? pill('重新读取', loadPluginPreferences) : null,
+  );
+}
+
+function useSidebarPreference() {
+  const state = usePluginPreferences();
+  return {
+    value: state.config ? state.config.showSidebarSync !== false : null,
+    loading: !state.config,
+    saving: state.saving,
+    error: state.error,
+  };
+}
+function loadSidebarPreference() {
+  return loadPluginPreferences();
+}
+function toggleSidebarPreference() {
+  return togglePluginPreference('showSidebarSync');
 }
 function SidebarVisibilityToggle() {
   const state = useSidebarPreference();

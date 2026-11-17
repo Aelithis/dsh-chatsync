@@ -27,6 +27,7 @@ function harness(
     bundle;
   const navigationCalls = [];
   const slots = new Map();
+  const registrations = [];
   const react = {
     createElement: (type, props, ...children) => ({ type, props: props || {}, children: children.flat(Infinity) }),
     useState(initial) {
@@ -54,7 +55,7 @@ function harness(
   vm.runInNewContext(
     source.replace(
       'module.exports = {',
-      'module.exports = { testComponents: { RecoveryReadableVersion, RecoveryReadableComparison, RecoveryMarkdown, syncMessagePresentation, bubble, useSync, scrollDialogWheel, StorageOverview, SessionsDialog, SessionPreview, UsageDialog, HistoryDialog, BackupDialog, RemoteFilesDialog, WorkspaceHistoryRepair, WorkspaceLocations, SidebarVisibilityProvider, SidebarVisibilityToggle, RepairPage, openRepairPage, GroupingRepairOverlay, installSendProtection, showSendBlock, DataHealth, recoveryRows, RecoveryDialog, RecoveryComparison, SyncPreferences, ConnectionSettings, RecoveryCenter, RecoveryItem, TransferReview, StartupSyncOverlay, StartupProgress, SyncIssues, TransferLine, STYLE },',
+      'module.exports = { testComponents: { RecoveryReadableVersion, RecoveryReadableComparison, RecoveryTranscriptComparison, RecoveryMarkdown, syncMessagePresentation, bubble, useSync, scrollDialogWheel, StorageOverview, SessionsDialog, SessionPreview, UsageDialog, HistoryDialog, BackupDialog, RemoteFilesDialog, WorkspaceHistoryRepair, WorkspaceLocations, SidebarVisibilityProvider, SidebarVisibilityToggle, PluginPreferences, RepairPage, openRepairPage, GroupingRepairOverlay, installSendProtection, showSendBlock, DataHealth, recoveryRows, RecoveryDialog, RecoveryComparison, SyncPreferences, ConnectionSettings, RecoveryCenter, RecoveryItem, TransferReview, StartupSyncOverlay, StartupProgress, SyncIssues, TransferLine, STYLE },',
     ),
     {
       window: {
@@ -88,6 +89,7 @@ function harness(
     slots: {
       inject: (_name, cb) => cb(),
       register: (meta, component) => {
+        registrations.push({ meta, component });
         slots.set(meta.id, component);
         return () => slots.delete(meta.id);
       },
@@ -103,6 +105,7 @@ function harness(
   return {
     functions: bundle.testComponents,
     slots,
+    registrations,
     navigationCalls,
     render(props = {}) {
       cursor = 0;
@@ -1396,6 +1399,34 @@ test('recovery comparison ignores JSON layout while preserving message whitespac
   let tree = h.render({ preview });
   assert.match(text(tree), /内容相同，仅排版不同/);
   assert.ok(!all(tree).some(n => /dss-diff-(add|remove)/.test(n.props.className || '')));
+  const rows = h.functions.recoveryRows(preview.local.text, preview.remote.text, true).rows;
+  assert.equal(
+    rows.some(row => row[4]),
+    false,
+  );
+  assert.deepEqual(
+    Array.from(
+      rows.filter(row => row[2] !== null),
+      row => row[0],
+    ),
+    preview.local.text.split('\n'),
+  );
+  assert.deepEqual(
+    Array.from(
+      rows.filter(row => row[3] !== null),
+      row => row[1],
+    ),
+    preview.remote.text.split('\n'),
+  );
+  const jsonl = h.functions.recoveryRows(
+    '{"seq":0,"text":"hello "}\n{"seq":1,"text":"next"}\n',
+    '{ "text": "hello ", "seq": 0 }\n\n{"text":"next","seq":1}\n',
+    true,
+  );
+  assert.equal(
+    jsonl.rows.some(row => row[4]),
+    false,
+  );
   all(tree)
     .find(n => n.type === 'input')
     .props.onChange({ target: { checked: false } });
@@ -1453,6 +1484,19 @@ test('conversation preview uses user and assistant messages and the native Markd
   assert.equal(native.type, NativeMarkdown);
   assert.equal(native.props.text, '# 内容');
   assert.equal(native.props.streaming, false);
+});
+
+test('conversation comparison aligns real messages in two columns without changing message whitespace', () => {
+  const message = value => ({ id: value, role: 'assistant', content: [{ type: 'text', text: value }] });
+  const h = harness(() => response({}), 'RecoveryTranscriptComparison');
+  const local = { messages: [message('shared'), message('hello ')] };
+  const remote = { messages: [message('shared'), message('hello')] };
+  const tree = h.render({ local, remote, headings: ['本机版本', '云端版本'] });
+  const cells = all(tree).filter(node => node.props.className === 'dss-transcript-cell');
+  assert.equal(cells.length, 4);
+  assert.equal(all(tree).filter(node => /dss-message-different/.test(node.props.className || '')).length, 2);
+  assert.match(h.functions.STYLE, /\.dss-transcript-headings,\.dss-transcript-grid\{display:grid/);
+  assert.match(h.functions.STYLE, /grid-template-columns:repeat\(2,minmax\(0,1fr\)\)/);
 });
 
 test('readable settings and image backups use fields and pictures rather than JSON serialization', () => {
@@ -1780,6 +1824,43 @@ test('daily and first setup headers always offer the sidebar visibility switch',
     await h.effects();
     assert.equal(all(h.render()).filter(n => n.type?.name === 'SidebarVisibilityToggle').length, 1);
   }
+});
+
+test('plugin details register ordinary settings once and save only the explicitly toggled preference', async () => {
+  let current = { ...initial, automatic: false, showSidebarSync: false };
+  const calls = [];
+  const h = harness(
+    (_url, options) => {
+      if (options) {
+        const patch = JSON.parse(options.body);
+        calls.push(patch);
+        current = { ...current, ...patch };
+      }
+      return response({ ok: true, config: current });
+    },
+    'PluginPreferences',
+    { timers: false },
+  );
+  const registered = h.registrations.filter(item => item.meta.name === 'plugins.bundle.config');
+  assert.equal(registered.length, 1);
+  assert.equal(registered[0].meta.key, '@dpskk2/dsh-chatsync');
+  assert.equal(registered[0].component, h.functions.PluginPreferences);
+  h.render();
+  await h.effects();
+  let tree = h.render();
+  assert.equal(all(tree).filter(node => node.props.role === 'switch').length, 2);
+  assert.doesNotMatch(text(tree), /检查更新/);
+  const automatic = all(tree).find(node => node.props['aria-label'] === '自动同步');
+  assert.equal(automatic.props['aria-checked'], false);
+  assert.deepEqual(calls, []);
+  await automatic.props.onClick();
+  tree = h.render();
+  assert.deepEqual(calls, [{ automatic: true }]);
+  assert.equal(current.showSidebarSync, false);
+  assert.equal(current.mode, initial.mode);
+  assert.equal(all(tree).find(node => node.props['aria-label'] === '自动同步').props['aria-checked'], true);
+  assert.equal(h.slots.has('dsh-sync'), false);
+  assert.equal(h.render({ view: 'summary' }), null);
 });
 
 test('old project history offers a bound preview before any confirmed rebuild', async () => {

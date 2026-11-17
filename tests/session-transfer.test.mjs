@@ -233,6 +233,108 @@ test('failed partial appends retain a full retry seed and complete before the ne
   assert.deepEqual(pendingSessionTransfers(engine), {});
 });
 
+test('new sessions validate and stage the full log before create and refresh the cache only after close', async t => {
+  const { engine, target, persistence } = fixture(t);
+  fs.unlinkSync(target);
+  persistence.locations.set(id, file);
+  const loadCatalog = engine.loadTransferCatalog;
+  const actions = [];
+  engine.loadTransferCatalog = async () => ({
+    ...(await loadCatalog()),
+    validateSeed(seed) {
+      assert.equal(seed.header.id, id);
+      assert.equal(seed.events.length, 14);
+      assert.deepEqual(pendingSessionTransfers(engine), {});
+      actions.push('validate');
+    },
+  });
+  let failClose = true;
+  for (const name of ['create', 'open']) {
+    const original = persistence[name].bind(persistence);
+    persistence[name] = async (...args) => {
+      if (name === 'create') {
+        const attempt = pendingSessionTransfers(engine)[file];
+        assert.deepEqual(fs.readFileSync(path.join(engine.home, attempt.source)), encode(14));
+      }
+      actions.push(name);
+      const handle = await original(...args);
+      const close = handle.close.bind(handle);
+      handle.close = async () => {
+        await close();
+        actions.push('close');
+        if (failClose) throw new Error('fixture close failure');
+      };
+      return handle;
+    };
+  }
+  let cached;
+  engine.ctx.sessionProjectionCache = {
+    coldSnapshot(...args) {
+      actions.push('cache');
+      cached = args;
+    },
+  };
+  const result = await applySessionTransfer(engine, file, encode(14));
+  assert.match(result.hint, /fixture close failure/);
+  assert.deepEqual(actions, ['validate', 'create', 'close']);
+  assert.ok(pendingSessionTransfers(engine)[file]);
+  failClose = false;
+  assert.equal(await retrySessionTransfers(engine), null);
+  assert.deepEqual(pendingSessionTransfers(engine), {});
+  assert.deepEqual(actions, ['validate', 'create', 'close', 'open', 'close', 'cache']);
+  assert.deepEqual(cached, [header, 0, parseSessionLog(encode(14)).slice(1)]);
+});
+
+test('a rejected complete seed never publishes a new session header', async t => {
+  const { engine, target, persistence } = fixture(t);
+  fs.unlinkSync(target);
+  persistence.locations.set(id, file);
+  const loadCatalog = engine.loadTransferCatalog;
+  engine.loadTransferCatalog = async () => ({
+    ...(await loadCatalog()),
+    validateSeed() {
+      throw new Error('fixture invalid complete seed');
+    },
+  });
+  let creates = 0;
+  persistence.create = async () => {
+    creates++;
+    throw new Error('must not create');
+  };
+  const result = await applySessionTransfer(engine, file, encode(14));
+  assert.equal(result.deferred, true);
+  assert.match(result.hint, /fixture invalid complete seed/);
+  assert.equal(creates, 0);
+  assert.equal(fs.existsSync(target), false);
+  assert.deepEqual(pendingSessionTransfers(engine), {});
+});
+
+test('a create failure after publishing the header retries the staged original under the same identity', async t => {
+  const { engine, target, persistence } = fixture(t);
+  fs.unlinkSync(target);
+  persistence.locations.set(id, file);
+  const create = persistence.create.bind(persistence);
+  let creates = 0;
+  persistence.create = async (...args) => {
+    creates++;
+    const pending = pendingSessionTransfers(engine)[file];
+    assert.deepEqual(fs.readFileSync(path.join(engine.home, pending.source)), encode(14));
+    const handle = await create(...args);
+    await handle.flush();
+    await handle.close();
+    throw new Error('fixture creation interrupted');
+  };
+  const result = await applySessionTransfer(engine, file, encode(14));
+  assert.equal(result.deferred, true);
+  assert.match(result.hint, /fixture creation interrupted/);
+  assert.equal(parseSessionLog(fs.readFileSync(target))[0].id, id);
+  assert.ok(pendingSessionTransfers(engine)[file]);
+  assert.equal(await retrySessionTransfers(engine), null);
+  assert.equal(creates, 1);
+  assert.deepEqual(fs.readFileSync(target), encode(14));
+  assert.deepEqual(pendingSessionTransfers(engine), {});
+});
+
 test('missing public host capabilities and remote deletion preserve the local original', async t => {
   const { engine, target } = fixture(t);
   engine.setHostContext(null);

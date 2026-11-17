@@ -192,6 +192,8 @@ function bubble(anchor, text, ok) {
 }
 
 const STYLE = [
+  '.dss-plugin-prefs .dss-rowline{justify-content:space-between;min-height:52px;border-bottom:1px solid var(--dsw-alias-border-l2);padding:16px 0;gap:16px;flex-wrap:nowrap}.dss-plugin-prefs .dss-rowtext{gap:4px;line-height:1.5}.dss-plugin-prefs small{color:var(--dsw-alias-label-secondary);font-size:14px}',
+  '.dss-transcript-comparison{display:flex;flex:1;flex-direction:column;min-height:0}.dss-transcript-headings,.dss-transcript-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr))}.dss-transcript-headings>div{padding:6px 10px;overflow-wrap:anywhere}.dss-transcript-scroll{flex:1;min-height:0;overflow:auto;overscroll-behavior:contain;border:1px solid var(--dsw-alias-border-l2,#ddd);border-radius:8px}.dss-transcript-cell{min-width:0;padding:4px 8px}.dss-transcript-cell:nth-child(even){border-left:1px solid var(--dsw-alias-border-l2,#ddd)}.dss-message-different>.dss-message-body{box-shadow:inset 3px 0 var(--dss-message-diff);padding-inline-start:8px}.dss-message-diff-remove{--dss-message-diff:light-dark(#a52029,#ffb3b8)}.dss-message-diff-add{--dss-message-diff:light-dark(#136c39,#8ce0ae)}.dss-message-user.dss-message-different>.dss-message-body{padding-inline-start:16px}.dss-transcript-cell .dss-message-user>.dss-message-body{max-width:100%}.dss-transcript-scroll>.dss-pill,.dss-transcript-scroll>p{margin:8px}',
   '@keyframes dss-spin{to{transform:rotate(360deg)}}',
   /* 结果/进度气泡 */
   '.dss-bubble{box-sizing:border-box;position:fixed;z-index:2147483000;max-width:min(340px,calc(100vw - 24px));padding:8px 12px;border-radius:10px;overflow-wrap:anywhere;',

@@ -37,6 +37,9 @@ function apply(ctx) {
   ctx.slots.inject('shell.overlay', () =>
     ctx.slots.register({ name: 'shell.overlay', id: 'dsh-sync-grouping', order: 110 }, GroupingRepairOverlay),
   );
+  ctx.slots.inject('plugins.bundle.config', () =>
+    ctx.slots.register({ name: 'plugins.bundle.config', key: '@dpskk2/dsh-chatsync' }, PluginPreferences),
+  );
   injectStyles(); // 侧栏胶囊按钮等样式全局注入,不依赖设置分节挂载
   // Same native panel contract as dshmarket; opening it never starts an upload.
   ctx.slots.inject('sidebar.panellist', () => {
@@ -58,7 +61,7 @@ function apply(ctx) {
       }
     };
     sidebarBinding = show;
-    if (sidebarState.value !== null) show(sidebarState.value);
+    if (pluginPreferences.config) show(pluginPreferences.config.showSidebarSync !== false);
     return () => {
       if (sidebarBinding === show) sidebarBinding = null;
       removeEntry?.();

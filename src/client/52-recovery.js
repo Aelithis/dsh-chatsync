@@ -1,19 +1,21 @@
-function RecoveryComparison({ preview, record }) {
+function RecoveryComparison({ preview, record, headings = ['本机版本', '云端版本'] }) {
   const single =
     record?.reason === 'local-project-unavailable' &&
     preview.local.sha256 &&
     preview.local.sha256 === preview.remote.sha256;
   const panes = useRef([]),
     [active, setActive] = useState(-1),
-    [ignoreFormatting, setIgnoreFormatting] = useState(true);
+    [ignoreWhitespace, setIgnoreWhitespace] = useState(true);
   const original = value => (value.missing ? '' : value.text || '');
-  const display = value => (ignoreFormatting ? recoveryContentText(original(value)) : original(value));
   const textual = !preview.local.binary && !preview.remote.binary;
   const comparison = useMemo(
-    () => (textual ? recoveryRows(display(preview.local), display(preview.remote)) : { rows: [], limited: false }),
-    [preview, ignoreFormatting],
+    () =>
+      textual
+        ? recoveryRows(original(preview.local), original(preview.remote), ignoreWhitespace)
+        : { rows: [], limited: false },
+    [preview, ignoreWhitespace],
   );
-  const changes = comparison.limited ? [] : comparison.rows.flatMap((r, i) => (r[0] !== r[1] ? [i] : []));
+  const changes = comparison.rows.flatMap((row, i) => (row[4] ? [i] : []));
   const jump = direction => {
     if (!changes.length) return;
     const next =
@@ -65,13 +67,13 @@ function RecoveryComparison({ preview, record }) {
             { className: 'dss-check' },
             e('input', {
               type: 'checkbox',
-              checked: ignoreFormatting,
+              checked: ignoreWhitespace,
               onChange: ev => {
-                setIgnoreFormatting(ev.target.checked);
+                setIgnoreWhitespace(ev.target.checked);
                 setActive(-1);
               },
             }),
-            '忽略 JSON 排版差异',
+            '忽略空行和 JSON 排版空白',
           )
         : null,
       changes.length
@@ -83,14 +85,6 @@ function RecoveryComparison({ preview, record }) {
           )
         : null,
     ),
-    single || !changes.length
-      ? null
-      : e(
-          'div',
-          { className: 'dss-diff-legend', 'aria-label': '差异颜色说明' },
-          e('strong', { className: 'dss-diff-local' }, '− 本机独有'),
-          e('strong', { className: 'dss-diff-remote' }, '＋ 远端独有'),
-        ),
     comparison.limited ? e('div', { className: 'dss-tip', role: 'status' }, '大文件仅按行号展示，未计算差异。') : null,
     partial ? e('div', { className: 'dss-tip', role: 'status' }, '预览已截断，仅显示部分内容。') : null,
     e(
@@ -108,7 +102,7 @@ function RecoveryComparison({ preview, record }) {
           e(
             'div',
             { className: 'dss-diff-title' },
-            single ? '迁移前的会话' : side ? '远端原件' : '当时本机原件',
+            single ? '迁移前的会话' : headings[side],
             value.missing ? ' · 此版本没有文件' : '',
           ),
           e(
@@ -116,7 +110,7 @@ function RecoveryComparison({ preview, record }) {
             {
               className: 'dss-diff-pane',
               tabIndex: 0,
-              'aria-label': side ? '远端原件内容' : '本机原件内容',
+              'aria-label': side ? '云端原件内容' : '本机原件内容',
               ref: node => {
                 panes.current[side] = node;
               },
@@ -136,7 +130,7 @@ function RecoveryComparison({ preview, record }) {
                   'div',
                   { className: 'dss-diff-lines', style: { minWidth: 'max(100%, ' + (longest + 14) + 'ch)' } },
                   comparison.rows.map((row, index) => {
-                    const changed = !comparison.limited && row[0] !== row[1] && row[side] !== undefined;
+                    const changed = row[4] && row[side] !== undefined;
                     return e(
                       'div',
                       {
@@ -248,19 +242,26 @@ function RecoveryItem({ record, busy, onRestored }) {
   const [loading, setLoading] = useState(false);
   const more = async side => {
     if (!preview || loading) return;
+    const sides = side ? [side] : ['local', 'remote'].filter(key => preview[key].presentation?.hasMore);
+    if (!sides.length) return;
     setLoading(true);
     try {
-      const previous = preview[side].presentation;
-      const result = await API.recoveryPreview(record.id, { [side]: previous.nextOffset });
+      const result = await API.recoveryPreview(
+        record.id,
+        Object.fromEntries(sides.map(key => [key, preview[key].presentation.nextOffset])),
+      );
       if (!result.ok) throw new Error(result.error);
-      if (result[side].sha256 && preview[side].sha256 && result[side].sha256 !== preview[side].sha256)
-        throw new Error('原件已变化，请重新打开');
-      const next = result[side].presentation;
-      if (next?.kind !== 'conversation') throw new Error('暂时无法继续读取对话');
-      setPreview({
-        ...preview,
-        [side]: { ...result[side], presentation: { ...next, messages: [...previous.messages, ...next.messages] } },
-      });
+      const expanded = { ...preview };
+      for (const key of sides) {
+        if (result[key].sha256 !== preview[key].sha256) throw new Error('原件已变化，请重新打开');
+        const next = result[key].presentation;
+        if (next?.kind !== 'conversation') throw new Error('暂时无法继续读取对话');
+        expanded[key] = {
+          ...result[key],
+          presentation: { ...next, messages: [...preview[key].presentation.messages, ...next.messages] },
+        };
+      }
+      setPreview(expanded);
     } catch (err) {
       setMessage(err.message || String(err));
     } finally {

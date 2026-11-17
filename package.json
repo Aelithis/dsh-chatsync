@@ -1,7 +1,7 @@
 {
   "name": "@dpskk2/dsh-chatsync",
-  "version": "0.21.2-private.1",
-  "chatsyncBuild": "aelith-private-cross-directory-20261031",
+  "version": "0.21.2-private.2",
+  "chatsyncBuild": "aelith-private-backport-20261117",
   "description": "换台电脑，接着聊。同步会话、附件、设置和项目文件。",
   "keywords": [
     "dsh",
@@ -61,12 +61,12 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/dpskk2/dsh-chatsync.git"
+    "url": "git+https://github.com/Aelithis/dsh-chatsync.git"
   },
   "bugs": {
-    "url": "https://github.com/dpskk2/dsh-chatsync/issues"
+    "url": "https://github.com/Aelithis/dsh-chatsync/issues"
   },
-  "homepage": "https://github.com/dpskk2/dsh-chatsync#readme",
+  "homepage": "https://github.com/Aelithis/dsh-chatsync#readme",
   "engines": {
     "node": ">=24",
     "dsh": ">=0.2.0-rc.1"

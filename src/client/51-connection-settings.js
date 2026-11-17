@@ -349,6 +349,7 @@ function SyncPreferences({ busy, onSaved, onChanged, onSavingChange, setup = fal
   const confirmed = useRef(null);
   const automatic = config?.automatic ?? config?.enabled !== false;
   const accept = actual => {
+    acceptPreferences({ ok: true, config: actual });
     confirmed.current = actual;
     setConfig(actual);
     setUncertain(false);
@@ -587,36 +588,122 @@ function recoveryContentText(text) {
   }
 }
 
-function recoveryRows(left, right) {
-  const a = left.split('\n'),
-    b = right.split('\n');
+function isRecoveryJson(text) {
+  try {
+    JSON.parse(text);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function withoutJsonWhitespace(text) {
+  return text.replace(/"(?:[^"\\]|\\.)*"|[ \t\r\n]+/g, token => (token[0] === '"' ? token : ''));
+}
+
+function recoveryRows(left, right, ignoreWhitespace = false) {
+  const lines = text => (text ? text.split(/\r?\n/) : []);
+  const leftLines = lines(left),
+    rightLines = lines(right);
+  const documents = ignoreWhitespace && isRecoveryJson(left) && isRecoveryJson(right);
+  const keys = original => {
+    if (!ignoreWhitespace) return original;
+    return original.map(line => {
+      if (!line.trim()) return null;
+      // Keep display lines intact; only safe JSON comparison keys are normalized.
+      if (documents) return withoutJsonWhitespace(line);
+      return isRecoveryJson(line) ? recoveryContentText(line) : line;
+    });
+  };
+  const a = keys(leftLines),
+    b = keys(rightLines);
+  const reflowed = documents && recoveryContentText(left) === recoveryContentText(right);
+  const comparison = alignRecoveryRows(a, b);
+  return {
+    ...comparison,
+    rows: comparison.rows.map(([i, j, different]) => [
+      leftLines[i],
+      rightLines[j],
+      i == null ? null : i + 1,
+      j == null ? null : j + 1,
+      different && !reflowed,
+    ]),
+  };
+}
+
+function alignRecoveryRows(a, b) {
+  const indices = keys => keys.flatMap((key, i) => (key === null ? [] : [i]));
+  const left = indices(a),
+    right = indices(b);
+  const shared = Math.min(left.length, right.length);
+  let prefix = 0,
+    suffix = 0;
+  while (prefix < shared && a[left[prefix]] === b[right[prefix]]) prefix++;
+  while (prefix + suffix < shared && a[left[left.length - 1 - suffix]] === b[right[right.length - 1 - suffix]])
+    suffix++;
+  const x = left.slice(prefix, left.length - suffix),
+    y = right.slice(prefix, right.length - suffix);
   // Bound memory and work for large logs; never present positional rows as an exact diff.
-  if (a.length * b.length > 400000)
+  const length = Math.max(a.length, b.length);
+  if (length > 3000 || (x.length + 1) * (y.length + 1) > 400000) {
     return {
       limited: true,
-      clipped: Math.max(a.length, b.length) > 3000,
-      rows: Array.from({ length: Math.min(3000, Math.max(a.length, b.length)) }, (_, i) => [
-        a[i],
-        b[i],
-        a[i] === undefined ? null : i + 1,
-        b[i] === undefined ? null : i + 1,
+      clipped: length > 3000,
+      rows: Array.from({ length: Math.min(3000, length) }, (_, i) => [
+        i < a.length ? i : null,
+        i < b.length ? i : null,
+        false,
       ]),
     };
-  const table = Array.from({ length: a.length + 1 }, () => new Uint16Array(b.length + 1));
-  for (let i = a.length - 1; i >= 0; i--)
-    for (let j = b.length - 1; j >= 0; j--)
-      table[i][j] = a[i] === b[j] ? table[i + 1][j + 1] + 1 : Math.max(table[i + 1][j], table[i][j + 1]);
+  }
+  const table = Array.from({ length: x.length + 1 }, () => new Uint16Array(y.length + 1));
+  for (let i = x.length - 1; i >= 0; i--)
+    for (let j = y.length - 1; j >= 0; j--)
+      table[i][j] = a[x[i]] === b[y[j]] ? table[i + 1][j + 1] + 1 : Math.max(table[i + 1][j], table[i][j + 1]);
   const rows = [];
+  let ai = 0,
+    bi = 0;
+  const add = (i, j, different) => {
+    while (a[ai] === null || b[bi] === null)
+      rows.push([a[ai] === null ? ai++ : null, b[bi] === null ? bi++ : null, false]);
+    if (i != null) ai = i + 1;
+    if (j != null) bi = j + 1;
+    if (i != null || j != null) rows.push([i, j, different]);
+  };
+  for (let i = 0; i < prefix; i++) add(left[i], right[i], false);
   let i = 0,
     j = 0;
-  while (i < a.length || j < b.length) {
-    if (i < a.length && j < b.length && a[i] === b[j]) {
-      rows.push([a[i], b[j], ++i, ++j]);
-    } else if (i < a.length && (j === b.length || table[i + 1][j] >= table[i][j + 1])) {
-      rows.push([a[i], undefined, ++i, null]);
+  while (i < x.length || j < y.length) {
+    if (i < x.length && j < y.length && a[x[i]] === b[y[j]]) {
+      add(x[i++], y[j++], false);
+    } else if (i < x.length && (j === y.length || table[i + 1][j] >= table[i][j + 1])) {
+      add(x[i++], null, true);
     } else {
-      rows.push([undefined, b[j], null, ++j]);
+      add(null, y[j++], true);
     }
   }
-  return { limited: false, rows };
+  for (let i = suffix; i > 0; i--) add(left[left.length - i], right[right.length - i], false);
+  add(null, null, false);
+  // Keep equal rows and real blank lines as anchors. Pair opposing edits
+  // within each block so replacements can be read side by side.
+  const aligned = [];
+  let local = [],
+    remote = [];
+  const flush = () => {
+    for (let index = 0; index < Math.max(local.length, remote.length); index++)
+      aligned.push([local[index] ?? null, remote[index] ?? null, true]);
+    local = [];
+    remote = [];
+  };
+  for (const [i, j, changed] of rows) {
+    if (changed) {
+      if (i != null) local.push(i);
+      if (j != null) remote.push(j);
+    } else {
+      flush();
+      aligned.push([i, j, false]);
+    }
+  }
+  flush();
+  return { limited: false, rows: aligned };
 }

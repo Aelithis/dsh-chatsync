@@ -4,6 +4,8 @@
 
 This is the Aelithis private branch for the companion DSH Private project-mapping API. Upstream update checks are removed. Use a reviewed pinned commit rather than the upstream npm installation instructions below. Project directories are selected per device and directory changes use shared project coordinates. Automatic restart on macOS is not provided; reopen the app manually. Content encryption is not enabled.
 
+Version `0.21.2-private.2` selectively backports session-import, conflict-comparison and ordinary plugin-detail settings fixes from upstream `be75a716`. It does not merge the complete 0.21.4 implementation. Normal cross-device continuation preserves the original session ID and header.
+
 ### Switch computers. Keep working.
 
 Bring your DeepSeek Harness (DSH) sessions, attachments, settings and project files to another computer.<br>
