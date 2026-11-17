@@ -30,8 +30,14 @@ export function removeFixture(root) {
   // can otherwise traverse a Windows junction even when lstat identifies it.
   const unlinkChildren = dir => {
     for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-      const file = path.join(dir, entry.name),
+      const file = path.join(dir, entry.name);
+      let stat;
+      try {
         stat = fs.lstatSync(file);
+      } catch (error) {
+        if (error.code === 'ENOENT') continue;
+        throw error;
+      }
       if (stat.isSymbolicLink()) fs.unlinkSync(file);
       else if (stat.isDirectory()) unlinkChildren(file);
     }
@@ -44,8 +50,14 @@ export function removeFixture(root) {
     if (process.platform !== 'win32' || error.code !== 'EPERM') throw error;
     const writable = dir => {
       for (const entry of fs.readdirSync(dir, { withFileTypes: true })) {
-        const file = path.join(dir, entry.name),
+        const file = path.join(dir, entry.name);
+        let stat;
+        try {
           stat = fs.lstatSync(file);
+        } catch (error) {
+          if (error.code === 'ENOENT') continue;
+          throw error;
+        }
         if (stat.isSymbolicLink()) continue;
         if (stat.isDirectory()) writable(file);
         else if (stat.isFile()) fs.chmodSync(file, 0o600);

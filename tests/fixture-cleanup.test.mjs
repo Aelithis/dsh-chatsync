@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { execFileSync } from 'node:child_process';
+import { createRequire } from 'node:module';
 import { removeFixture } from './helpers/fixture-cleanup.mjs';
 
 test('fixture teardown removes readonly Git objects, preserves junction targets and refuses other roots', t => {
@@ -28,4 +29,33 @@ test('fixture teardown removes readonly Git objects, preserves junction targets 
   removeFixture(root);
   assert.equal(fs.existsSync(root), false);
   assert.equal(fs.readFileSync(path.join(outside, 'original.txt'), 'utf8'), 'outside stays unchanged');
+});
+
+test('fixture teardown accepts an enumerated Git maintenance lock disappearing before lstat', t => {
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'chatsync-cleanup-race-'));
+  t.after(() => removeFixture(root));
+  const objects = path.join(fs.realpathSync(root), '.git', 'objects');
+  const lock = path.join(objects, 'maintenance.lock');
+  fs.mkdirSync(objects, { recursive: true });
+  fs.writeFileSync(lock, 'synthetic maintenance lock');
+  const cleanupFs = process.versions.electron ? createRequire(import.meta.url)('original-fs') : fs;
+  const readdir = cleanupFs.readdirSync;
+  let removedAfterEnumeration = false;
+  t.mock.method(cleanupFs, 'readdirSync', (directory, options) => {
+    const entries = readdir(directory, options);
+    if (directory === objects && !removedAfterEnumeration) {
+      assert.equal(
+        entries.some(entry => entry.name === 'maintenance.lock'),
+        true,
+      );
+      fs.unlinkSync(lock);
+      removedAfterEnumeration = true;
+    }
+    return entries;
+  });
+  assert.doesNotThrow(() => {
+    removeFixture(root);
+  });
+  assert.equal(removedAfterEnumeration, true);
+  assert.equal(fs.existsSync(root), false);
 });
